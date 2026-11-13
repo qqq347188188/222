@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "delay": 12,
+  "probe": false,
+  "loop": 1,
+  "interval": 0,
+  "actions": [
+    {
+      "method": "AddItem",
+      "count": 99,
+      "args": [
+        {"t": "str", "v": "BaiJian_HongQiChe"},
+        {"t": "i64", "v": 99}
+      ]
+    }
+  ]
+}
