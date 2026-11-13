@@ -1,0 +1,106 @@
+name: build-dylib
+
+# 一次 Run 同时产出：GMInject.dylib + GMInject.deb（iOS 16 rootless）
+# 若 deb 打包因环境失败，不影响 dylib 产物（deb 步骤 continue-on-error）
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'macOS runner（默认 macos-13，排队久就换 macos-14/15）'
+        required: false
+        default: 'macos-13'
+        type: choice
+        options:
+          - macos-13
+          - macos-14
+          - macos-15
+          - macos-latest
+  push:
+    paths:
+      - 'GMInject.m'
+      - 'gm_offsets.h'
+      - 'build.sh'
+      - 'Makefile'
+      - '.github/workflows/build-dylib.yml'
+
+jobs:
+  build:
+    runs-on: ${{ github.event.inputs.runner || 'macos-13' }}
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 检查 Xcode 与 iOS SDK
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+
+      - name: 编译 dylib
+        run: |
+          chmod +x build.sh
+          bash build.sh
+
+      - name: 核对 dylib
+        run: |
+          lipo -info build/GMInject.dylib
+          file build/GMInject.dylib
+
+      - name: 打包 deb（iOS 16 rootless）
+        continue-on-error: true
+        run: |
+          set -e
+          if ! command -v dpkg-deb >/dev/null 2>&1; then
+            brew install dpkg || true
+          fi
+          mkdir -p payload/Library/MobileSubstrate/DynamicLibraries DEBIAN
+          cp build/GMInject.dylib payload/Library/MobileSubstrate/DynamicLibraries/GMInject.dylib
+          cat > payload/Library/MobileSubstrate/DynamicLibraries/GMInject.plist <<'PL'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>Filter</key>
+            <dict>
+              <key>Bundles</key>
+              <array>
+                <string>com.midagame.truckstar</string>
+              </array>
+            </dict>
+          </dict>
+          </plist>
+          PL
+          cat > DEBIAN/control <<'CTRL'
+          Package: com.gminject.truckstar
+          Name: GMInject
+          Version: 1.0.0
+          Architecture: iphoneos-arm64
+          Description: 卡车之星 GM 物品注入器
+          Maintainer: GMInject <gminject@example.com>
+          Section: Tweaks
+          Depends: ellekit
+          CTRL
+          cat > DEBIAN/postinst <<'POST'
+          #!/bin/bash
+          set -e
+          D=/Library/MobileSubstrate/DynamicLibraries
+          chmod 0755 "$D/GMInject.dylib" 2>/dev/null || true
+          chmod 0644 "$D/GMInject.plist" 2>/dev/null || true
+          exit 0
+          POST
+          chmod 0755 DEBIAN/postinst
+          dpkg-deb -b -Zgzip payload GMInject.deb
+          ls -lh GMInject.deb
+
+      - name: 上传 dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: GMInject.dylib
+          path: build/GMInject.dylib
+          if-no-files-found: error
+
+      - name: 上传 deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: GMInject.deb
+          path: GMInject.deb
+          if-no-files-found: warn
