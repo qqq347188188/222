@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "delay": 12,
+  "probe": false,
+  "loop": 1,
+  "interval": 0,
+  "actions": [
+    {"method": "AddCoin", "count": 999999999, "args": [{"t": "i64", "v": 999999999}]},
+    {"method": "AddBlueDiamonds", "count": 999999999, "args": [{"t": "i64", "v": 999999999}]}
+  ]
+}
